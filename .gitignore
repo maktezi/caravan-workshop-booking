@@ -12,5 +12,9 @@
 /api/.phpunit.result.cache
 /web/node_modules/
 /web/.next/
+/web/.next-e2e/
 /web/out/
 /web/*.tsbuildinfo
+
+/web/test-results/
+/web/playwright-report/
