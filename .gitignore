@@ -1,0 +1,16 @@
+/.idea/
+.DS_Store
+**/.env
+**/.env.*
+!**/.env.example
+/api/vendor/
+/api/bootstrap/cache/*.php
+/api/storage/**
+!/api/storage/**/
+!/api/storage/**/.gitignore
+/api/.phpunit.cache/
+/api/.phpunit.result.cache
+/web/node_modules/
+/web/.next/
+/web/out/
+/web/*.tsbuildinfo

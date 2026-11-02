@@ -2,19 +2,21 @@ This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-
 
 ## Getting Started
 
-First, run the development server:
+From the repository root, install dependencies and run the development server:
 
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+cd web
+bun install --frozen-lockfile
+bun run dev
 ```
 
 Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+
+Run `bun run lint` to check the code and `bun run build` to verify the production build.
+After building, run `bun run start` to serve the production app.
+
+The server-only Laravel API URL is documented in `.env.example`. Copy it to
+`.env.local` when configuring a local environment.
 
 You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
 
