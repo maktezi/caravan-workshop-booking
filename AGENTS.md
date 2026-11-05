@@ -25,7 +25,7 @@ Use four-space indentation in PHP and two spaces in TypeScript/TSX. Format PHP w
 
 ## Testing Guidelines
 
-Name PHP tests `*Test.php` and use descriptive Pest scenarios. Cover overlap rejection, adjacent appointments, cancellation, partial updates, filtering, and pagination. No numerical coverage threshold is configured. SQLite tests establish API behavior; verify concurrency separately with `DB_DATABASE=caravan_workshop_test vendor/bin/pest --configuration=phpunit.mysql.xml`. This command recreates the dedicated test database.
+Name PHP tests `*Test.php` and use descriptive Pest scenarios. Cover overlap rejection, adjacent appointments, cancellation, partial updates, filtering, and pagination. No numerical coverage threshold is configured. The default suite includes independent-process SQLite concurrency tests. Optional MySQL compatibility can be checked separately with `DB_DATABASE=caravan_workshop_test vendor/bin/pest --configuration=phpunit.mysql.xml`. This command recreates the dedicated test database.
 
 ## Commit & Pull Request Guidelines
 

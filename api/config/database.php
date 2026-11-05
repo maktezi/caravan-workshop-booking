@@ -40,10 +40,11 @@ return [
             'prefix_indexes' => null,
             'mask_bindings_in_exception_messages' => env('DB_MASK_BINDINGS', false),
             'foreign_key_constraints' => env('DB_FOREIGN_KEYS', true),
-            'busy_timeout' => null,
+            'busy_timeout' => 5000,
             'journal_mode' => null,
             'synchronous' => null,
-            'transaction_mode' => 'DEFERRED',
+            // Reserve SQLite's single writer before any availability reads.
+            'transaction_mode' => 'IMMEDIATE',
             'pragmas' => [],
         ],
 

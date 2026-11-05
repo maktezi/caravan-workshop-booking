@@ -18,3 +18,5 @@
 
 /web/test-results/
 /web/playwright-report/
+
+/api/database/*.sqlite*

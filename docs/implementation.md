@@ -1,87 +1,57 @@
 # Implementation Tracking
 
-Source: [PRD v1.0](prd.md). Updated **2 November 2026**.
+Source: [PRD](prd.md). Updated **3 November 2026**.
 
-**Status: application code implemented; final runtime verification and external submission remain open.** A passing build or SQLite suite does not establish MySQL concurrency or browser behavior.
-
-## Scope
-
-The implementation follows the PRD: one internal workshop, Bay 1–4, and the `api/` + `web/` structure. Authentication, tenancy, billing, notifications, deployment and CI/CD are excluded. Billo informed the backend bootstrap and availability predicate; its domain-specific booking lifecycle and PostgreSQL tenancy were not imported.
+**Status: application task implemented and runtime checks passed; external application materials remain open.** SQLite is the default, matching the job posting. Authentication and tenancy remain outside this small task.
 
 ## Functional requirements
 
-| Requirement | Implementation | Evidence / remaining verification |
-|---|---|---|
-| FR-01 Booking CRUD and cancellation | Done | Laravel resource routes and feature tests; Next.js list/detail/forms and actions |
-| FR-02 Fields, validation, indexes, UTC | Done | Migration, Form Requests, resource serialization, feature tests |
-| FR-03 Pending/confirmed/cancelled behavior | Done | Status validation, reactivation rejection and cancellation tests |
-| FR-04 Concurrent overlap prevention | Implemented | Transactions, permanent bay row locks, current reads, deadlock retries; MySQL race test blocked in sandbox |
-| FR-05 List, pagination and status filters | Done | Server Component, status links, ten-row API pagination, preserved URL parameters; browser execution pending |
-| FR-06 Details and missing records | Done | All booking fields displayed; `getBooking` calls `notFound()` for invalid/missing IDs; browser execution pending |
-| FR-07 Create and inline errors | Done | Server Action, Laravel error mapping, retained values and conflict feedback; action tests pass |
-| FR-08 Edit and refresh | Done | Server-fetched initial values, Melbourne-local inputs, PUT action and path revalidation; action tests pass |
-| FR-09 Cancel/delete confirmations | Done | Native modal dialog, distinct PATCH/DELETE actions and redirects; action tests pass, browser execution pending |
-| FR-10 Melbourne timezone and DST | Done | UTC conversion/display and explicit rejection of missing/repeated local times; 14 timezone tests pass |
-
-## Implementation map
-
-| Responsibility | Files |
+| Requirement | Implementation and evidence |
 |---|---|
-| HTTP API | `api/routes/api.php`, `api/app/Http/Controllers/Api/BookingController.php` |
-| Validation and serialization | `api/app/Http/Requests/`, `api/app/Http/Resources/BookingResource.php` |
-| Transactions and locking | `api/app/Services/BookingService.php` |
-| Storage and sample data | `api/database/migrations/`, `api/database/seeders/DatabaseSeeder.php` |
-| Initial server data | `web/app/bookings/`, `web/lib/bookings.ts`, `web/lib/api.ts` |
-| Mutations and revalidation | `web/app/actions/bookings.ts` |
-| Interactive forms and dialogs | `web/components/bookings/booking-form.tsx`, `booking-actions.tsx` |
-| Shared types and timezone | `web/types/booking.ts`, `web/lib/timezone.ts` |
-| Loading/error/empty/404 states | Route state files under `web/app/bookings/`; list empty state in its Server Component |
+| Booking CRUD, fields and validation | Laravel resource routes, Form Requests, resources, API feature tests |
+| Overlap rejection and cancellation | Transactional service, half-open intervals, cancelled bookings excluded; API tests |
+| Simultaneous bookings | SQLite `BEGIN IMMEDIATE`, 5000ms busy timeout; three independent-process HTTP race tests |
+| List, status filtering, pagination | Server Component fetches Laravel; status/page come from the URL; browser tests |
+| Details and missing records | Server fetch and `notFound()`; API and browser tests |
+| Create/edit and inline errors | Server Actions map Laravel 422 field errors to action state; unit and browser tests |
+| Updates without full reload | Revalidate list/detail/edit paths and redirect; browser test revisits a previously viewed filtered list and checks that the document survives |
+| Loading/error/empty states | Route loading skeletons and error boundaries; list empty state and missing-record pages |
+| Melbourne timezone and DST | UTC API/storage; Melbourne forms/display; skipped/repeated local times rejected; unit and browser tests |
 
-## Verification log
+## Verification
 
 | Check | Result |
 |---|---|
-| `cd api && composer validate --strict` | Passed in final checks |
-| `cd api && php artisan test --compact` | Passed: **32 tests, 95 assertions**, SQLite |
+| `cd api && composer validate --strict` | Passed; installed Composer emits a dependency deprecation notice |
+| `cd api && vendor/bin/pest --compact` | **35 passed, 122 assertions**, including all three SQLite races |
 | `cd api && vendor/bin/pint --test` | Passed |
-| `cd web && bun install --frozen-lockfile` | Passed; lockfile unchanged |
-| `cd web && bun run test` | Passed: **26 tests, 51 assertions** |
+| `cd web && bun run test` | **26 passed, 51 assertions** |
 | `cd web && bun run lint` | Passed |
 | `cd web && bun run typecheck` | Passed |
-| `cd web && bun run build` | Passed; list/detail/edit are dynamic server routes |
-| Impeccable source detector | Passed with no findings; not a visual/browser inspection |
-| MySQL independent-process race test | **Blocked**: PDO connection returns `Operation not permitted` before assertions |
-| Desktop/mobile Playwright suite | **Blocked**: API fixture migrates/seeds, but PHP cannot listen on `127.0.0.1:18000` in the sandbox |
-| Rendered desktop/mobile review | **Blocked**: local Chrome launch aborts in the sandbox; screenshots were not produced |
+| `cd web && bun run build` | Passed; list/detail/edit are dynamic routes |
+| Desktop/mobile Playwright suite | **20 passed** using local Chrome |
+| SQLite setup smoke test | Passed in an isolated application copy using existing installed dependencies: `.env.example`, key generation, fresh SQLite file, migration/seeding, HTTP 200 and 24 bookings |
+| Public repository | Confirmed public at `https://github.com/maktezi/caravan-workshop-booking`; local changes still need publishing |
 
-### PRD test coverage
+The race tests live in `api/tests/Feature/SQLiteConcurrencyTest.php` and run with the default Pest suite. Two workers connect to one temporary SQLite file and enter transactions while a parent holds the database writer. After release, exactly one request succeeds and the other returns HTTP 422 with a `service_bay` error. Scenarios cover create/create, create/reactivation, and reactivation/reactivation. Every scenario verifies only one active booking remains, and removes its temporary database afterward.
 
-- **T01–T07:** creation, required/invalid values, invalid time ranges, bays and statuses in `api/tests/Feature/BookingTest.php`.
-- **T08–T15:** overlapping active bookings, adjacent/different bays, cancellation, moving to an occupied bay, self-exclusion and reactivation tests in the same file.
-- **T16–T19:** filtering, pagination/order, missing records and permanent deletion tests in the same file.
-- **T20:** `api/tests/Concurrency/BookingConcurrencyTest.php` plus independent workers in `tests/Support/competing-booking.php`. Test exists, execution blocked; **not verified**.
-- **Frontend additions:** 12 Server Action tests cover API methods, UTC payloads, field-error/value retention, offline/server/missing-record errors, confirmation requirements, invalidation and redirect behavior. Fourteen timezone cases cover summer/winter offsets and DST boundaries.
-- **Browser scenarios:** ten tests across desktop and mobile projects cover CRUD, confirmations, conflict retention/focus, filtering, pagination, DST errors, missing records and empty pages. Discovered/typechecked, not executed successfully.
+The old MySQL-only concurrency test remains optional and was not rerun. SQLite runtime checks supersede the previous sandbox-blocked verification entries. A complete dependency install from a clean clone and a separate manual visual review were not performed in this update.
 
 ## Engineering choices
 
-- Route-specific loading skeletons mirror the list (ten rows, filters, pagination), detail, and new/edit form layouts. They reuse responsive page classes, expose a single loading announcement, and disable animation for reduced-motion preferences.
+- SQLite uses immediate transactions so availability checks run after acquiring the database writer; all booking mutations remain in `BookingService`. MySQL compatibility retains destination-bay row locks and deadlock retries.
+- Reads use server-only helpers with `cache: "no-store"`; React memoization deduplicates detail reads within a render.
+- Successful Server Actions revalidate list/detail/edit routes before redirecting. Failed submissions preserve values and display Laravel field errors.
+- Cancellation preserves history and releases the bay. Deletion is permanent. Both require confirmation.
+- Fresh setup uses SQLite without a database server. Generated SQLite files are ignored by Git.
+- README explains caching, simultaneous requests, changes for 200 dealers, and AI assistance/corrections.
 
-- All reads use server-only HTTP helpers with `no-store`; the browser never accesses MySQL.
-- Successful actions revalidate list/detail/edit paths and redirect without a full reload.
-- Action state preserves failed form submissions; pending controls prevent duplicate submissions.
-- Confirmation dialogs distinguish cancellation from deletion. The detail page keys actions by booking status so cancellation closes its dialog after navigation.
-- MySQL connections explicitly select InnoDB and UTC. The destination bay is locked even when no booking exists; updates reload the booking before merging partial fields. Transaction deadlocks retry up to five times.
-- A production Webpack build avoids auxiliary Turbopack loader ports in this environment. CSS and Tailwind style locally owned shadcn/ui selects and date pickers; local font fallbacks avoid external font requests. Laravel validation remains authoritative.
+## Remaining external work
 
-## Remaining acceptance work
+- [ ] Record a Loom walkthrough under five minutes with screen and voice, transcript enabled, and anyone-with-link sharing.
+- [ ] Publish the completed local changes to the public repository.
+- [ ] Supply the CV, production project link and ownership description.
+- [ ] Confirm individual-applicant status and availability for 40 hours/week, Monday–Friday, 7am–4pm PHT.
+- [ ] Submit via OnlineJobs with favourite coding language + favourite AI model as the subject.
 
-- [ ] Run Laravel migrations/seeding against the intended MySQL instance and verify local startup.
-- [ ] Create the disposable `caravan_workshop_test` database and pass T20 using the README command outside the sandbox.
-- [ ] Run `bun run test:e2e` outside the sandbox and resolve any runtime failures.
-- [ ] Inspect desktop and mobile views, keyboard navigation, validation focus and confirmation dialogs in a real browser.
-- [ ] Verify a clean-clone setup from the README.
-- [ ] Record the screen-and-voice Loom walkthrough with transcript and public-link access.
-- [ ] Verify/publish the intended public repository and submit both links before the deadline.
-
-Follow PRD §13 for the five-minute walkthrough. Do not mark readiness complete until the MySQL and browser checks pass and the external deliverables exist.
+These personal and external deliverables cannot be established by the application code.

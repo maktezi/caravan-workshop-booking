@@ -4,7 +4,9 @@
 **Version:** 1.0  
 **Status:** Ready for Development  
 **Project Type:** Full-Stack Technical Assessment  
-**Technology:** Laravel 13, Next.js 15+, TypeScript, MySQL, Pest  
+**Scope correction (3 November 2026):** The application posting requires SQLite without a database server. This supersedes the original MySQL setup; optional MySQL compatibility remains. Authentication and tenancy remain outside the task.
+
+**Technology:** Laravel 13, Next.js 15+, TypeScript, SQLite, Pest
 **Submission Deadline:** November 4, 2026 — 11:59 PM PHT  
 **Estimated Development Effort:** Approximately 3 hours
 
@@ -53,7 +55,7 @@ Without proper booking management, staff may accidentally assign overlapping app
 
 **Backend**
 - Laravel REST API
-- MySQL database
+- SQLite database
 - Booking CRUD operations
 - Form Request validation
 - Concurrency-safe overlap prevention
@@ -185,18 +187,18 @@ Checking for conflicts before inserting the booking is not sufficient.
 The implementation must serialize conflicting operations using a database transaction and a shared locking mechanism.
 
 Recommended approach:
-1. Begin a database transaction.
-2. Lock the corresponding service bay's dedicated database row using `SELECT ... FOR UPDATE`.
+1. Begin a transaction with `BEGIN IMMEDIATE` (Laravel connection transaction mode `IMMEDIATE`, busy timeout 5000ms).
+2. SQLite reserves its single writer before any availability reads.
 3. Query for overlapping active bookings.
 4. Reject the operation if a conflict exists.
 5. Otherwise, create or update the booking.
 6. Commit the transaction.
 
-The four fixed service bays can be represented by seeded database rows used as stable locking resources.
+The four fixed service bays are represented by seeded database rows. SQLite serializes database writers; optional MySQL deployments can lock these stable bay rows instead.
 
 All booking writes must follow this process, including status updates and changing service bays. This prevents two concurrent requests from both observing an empty slot and creating conflicting bookings.
 
-Lock the destination bay for a rescheduled booking; where an operation needs multiple bay locks, acquire them in a consistent order.
+Use the same write transaction for rescheduling, cancellation and deletion. SQLite does not support row-level `SELECT ... FOR UPDATE` locks.
 
 ### FR-05: Booking Listing
 
@@ -297,7 +299,7 @@ Requirements:
 ### 4.1 Technology
 
 - PHP and Laravel 13
-- MySQL
+- SQLite
 - Laravel Eloquent ORM
 - Laravel Form Requests
 - Laravel API Resources
@@ -428,7 +430,7 @@ Keep the implementation small; avoid unnecessary repositories, interfaces, and a
 - Cancel booking
 - Revalidate affected pages
 
-Server Actions must call Laravel HTTP endpoints rather than access MySQL.
+Server Actions must call Laravel HTTP endpoints rather than access SQLite.
 
 ### 5.3 Recommended Frontend Architecture
 
@@ -527,7 +529,7 @@ Seeded data:
 - Bay 3
 - Bay 4
 
-The `service_bays` table is used internally for concurrency-safe locking. No management UI or CRUD endpoints for service bays are required.
+The `service_bays` table constrains valid bays and can support row locking on a future server database. No management UI or CRUD endpoints for service bays are required.
 
 ---
 
@@ -558,7 +560,7 @@ Use Pest to verify critical business behavior.
 | T19 | Delete booking | Record removed |
 | T20 | Concurrent competing creates | At most one active booking succeeds |
 
-**Concurrency test requirement:** Use two genuinely independent database connections or processes with a controlled overlapping execution window. A purely sequential test does not demonstrate that the race condition is prevented. The concurrent test must run against MySQL, using the same transactional locking behavior as production.
+**Concurrency test requirement:** Use two genuinely independent database connections or processes with a controlled overlapping execution window. A purely sequential test does not demonstrate that the race condition is prevented. The concurrent test must run against SQLite, using the same transactional locking behavior as production.
 
 ---
 
@@ -593,7 +595,7 @@ Use Pest to verify critical business behavior.
 
 ### 8.5 Data Integrity
 
-- Database persists all bookings in MySQL.
+- Database persists all bookings in SQLite.
 - All timestamp comparisons use normalized UTC values.
 - Booking conflicts must be checked within the database transaction.
 - Cancelled bookings do not block availability.
@@ -659,7 +661,7 @@ The assessment should prioritize correctness over styling.
 The assessment is functionally complete when:
 
 - [ ] The repository contains `/api` and `/web`.
-- [ ] Laravel 13 runs locally with MySQL.
+- [ ] Laravel 13 runs locally with SQLite.
 - [ ] Next.js 15+ runs locally.
 - [ ] The API supports booking CRUD.
 - [ ] Form Requests validate inputs correctly.
@@ -690,7 +692,7 @@ The root README must contain:
 
 ### Local Setup
 - Prerequisites
-- MySQL configuration
+- SQLite configuration
 - Backend installation and migration commands
 - Database seeding instructions
 - Backend testing instructions
@@ -752,7 +754,7 @@ The following assumptions should be verified during implementation and documente
 8. No login, authorization, payments, or notifications are needed.
 9. Deletion is permanent, while cancellation retains booking history.
 10. Booking list sorting is deterministic and based on start time, with ID as a tie-breaker.
-11. Service bay database rows serve as stable concurrency locks.
+11. SQLite uses immediate write transactions; service bay rows can serve as stable locks on a future MySQL deployment.
 12. Form validation and booking conflict errors use HTTP 422 with field-specific errors.
 
 ---

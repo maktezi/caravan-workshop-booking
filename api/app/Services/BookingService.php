@@ -22,7 +22,7 @@ class BookingService
             if ($end->lessThanOrEqualTo($start)) {
                 throw ValidationException::withMessages(['ends_at' => 'The end time must be later than the start time.']);
             }
-            // Destination locks serialize even competing creates into a previously empty bay.
+            // SQLite reserves its writer at BEGIN IMMEDIATE; MySQL locks this stable bay row.
             ServiceBay::query()->where('name', $data['service_bay'])->lockForUpdate()->firstOrFail();
             if ($data['status'] !== 'cancelled') {
                 // A locking read sees committed changes after waiting under MySQL REPEATABLE READ.

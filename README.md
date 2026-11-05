@@ -6,21 +6,22 @@ The application supports booking CRUD, cancellation, conflict prevention, server
 
 ## Local setup
 
-Prerequisites: PHP 8.5+, Composer, MySQL with InnoDB, Bun, and Node.js 20.9+ (or a newer supported LTS).
+Prerequisites: PHP 8.5+ with PDO SQLite, Composer, Bun, and Node.js 20.9+ (or a newer supported LTS).
 
-Create a MySQL database named `caravan_workshop`, then:
+No database server is needed:
 
 ```sh
 cd api
 composer install
 cp .env.example .env
-# Set DB_HOST, DB_PORT, DB_DATABASE, DB_USERNAME and DB_PASSWORD.
+touch database/database.sqlite
+# Keep DB_CONNECTION=sqlite; DB_DATABASE can remain unset.
 php artisan key:generate
 php artisan migrate --seed
 composer dev
 ```
 
-The migration creates Bay 1–4 as permanent locking resources. The seeder adds 24 sample appointments only when the bookings table is empty.
+The migration creates Bay 1–4 as fixed service bays. The seeder adds 24 sample appointments only when the bookings table is empty.
 
 In another terminal:
 
@@ -57,14 +58,9 @@ composer test
 composer lint
 ```
 
-The default Pest suite uses SQLite in memory. It covers API behavior but cannot prove MySQL locking. Create a **disposable** MySQL database named `caravan_workshop_test`, configure the test connection, then:
+The default Pest suite covers API behavior using SQLite in memory and concurrency using a temporary SQLite file. Three race scenarios (create/create, create/update, update/update) run two independent PHP processes through the HTTP kernel. A parent-held write transaction forces both requests to contend; exactly one succeeds and the other returns HTTP 422 with a `service_bay` error. Temporary databases are removed afterward.
 
-```sh
-cd api
-DB_DATABASE=caravan_workshop_test vendor/bin/pest --configuration=phpunit.mysql.xml
-```
-
-This test **recreates tables** and requires a database name ending in `_test`. Two independent PHP processes attempt competing bookings while a parent-held bay lock creates a controlled overlap window. After release, exactly one must create a booking and the other must report a conflict.
+The existing MySQL race test remains optional for a future MySQL deployment; it is not needed to run this task.
 
 ```sh
 cd web
@@ -88,15 +84,15 @@ bun run test:e2e
 PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH='/Applications/Google Chrome.app/Contents/MacOS/Google Chrome' bun run test:e2e
 ```
 
-The ten desktop/mobile cases cover CRUD, confirmations, retained validation values, conflicts, filtering, pagination, DST errors, empty pages, and missing records. See the [tracker](docs/implementation.md) for observed results. MySQL concurrency and browser execution are currently blocked by the agent sandbox's socket/process restrictions; neither is claimed as passed.
+The desktop/mobile cases cover CRUD, confirmations, retained validation values, conflicts, filtering, pagination, DST errors, empty pages, and missing records. See the [tracker](docs/implementation.md) for observed results. Verified: 35 backend tests (including three SQLite races), 26 frontend unit tests, and all 20 desktop/mobile browser cases pass. PHP formatting, frontend lint/type checks, and the production build also pass.
 
 ## Engineering decisions
 
 **Freshness:** Server Components fetch Laravel with `cache: "no-store"`. React request memoization avoids repeated detail reads within a render without sharing cached bookings across requests. Server Actions revalidate the list, affected detail, and edit routes before redirecting. Field errors return action state, preserving local form values without a full reload.
 
-**Concurrency:** Every write uses a transaction and locks a permanent destination-bay row, including empty bays. Updates first reload and lock the booking so partial changes merge against current data. The overlap query uses a locking read to see newly committed bookings under MySQL repeatable-read isolation. Deadlocks retry up to five times. Cancelled bookings do not block a bay; half-open intervals permit adjacent appointments. MySQL connections use InnoDB and UTC.
+**Concurrency:** SQLite transactions use `BEGIN IMMEDIATE`, reserving the single database writer before reading availability. A competing request waits for the writer (up to five seconds), then checks availability after the first commits; the loser receives Laravel's normal field-specific conflict error. Every create, update, cancellation and deletion uses `BookingService` transactions. SQLite serializes all writers, which is appropriate for this small module. Cancelled bookings do not block a bay, and half-open intervals permit adjacent appointments. MySQL support retains bay-row locks and transaction retries.
 
-**Scaling to 200 dealers:** Add authorization and tenant context to every request; isolate dealer data and use dealer-scoped bay rows, availability queries, indexes and locks. Dealer isolation must apply equally to reads, writes, queues and tests. A database-per-dealer strategy is possible, but Billo's PostgreSQL schema provisioning would need adapting to MySQL.
+**Scaling to 200 dealers:** First add authenticated dealer context and policies, scoping every read, write, availability check and queue job to that dealer, with isolation tests. Move to a server database such as MySQL, use dealer-scoped bay rows and indexes, and serialize competing writes with bay-row locks so unrelated dealers can write concurrently. Keep booking rules in the service and measure query performance before adding caches or queues.
 
 ## Assumptions and scope
 
@@ -104,8 +100,8 @@ This is an internal demonstration for dealership staff. Bays are fixed and canno
 
 ## AI disclosure
 
-OpenAI Codex assisted repository inspection, deriving the Laravel dependency subset from Billo's local Laravel 13.33 installation, implementing the API/frontend, and writing tests. No Billo credentials, business records, billing, GraphQL, inventory, or production environment were copied. The Impeccable skill informed interface accessibility and layout.
+OpenAI Codex assisted implementation, repository review, and test development. The Impeccable skill informed interface accessibility and layout.
 
-One corrected AI mistake: the initial Laravel bootstrap omitted middleware configuration, causing API dispatch to fail. A failing health test exposed it; the bootstrap was corrected. Another review correction keys booking actions by status so a successful cancellation remounts and closes its confirmation dialog.
+One corrected AI mistake: the initial design targeted MySQL despite the application requiring SQLite. It was corrected to use SQLite by default, acquire the write reservation before availability reads, and test simultaneous HTTP requests against a shared SQLite file. Another corrected mistake: the initial Laravel bootstrap omitted middleware configuration, causing API dispatch to fail. A failing health test exposed it; the bootstrap was corrected. Another review correction keys booking actions by status so a successful cancellation remounts and closes its confirmation dialog.
 
 The developer must record the screen-and-voice Loom walkthrough, enable its transcript/public link, and submit the repository and Loom URLs. No video or submission is claimed to exist.

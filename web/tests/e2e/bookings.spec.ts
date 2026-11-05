@@ -29,12 +29,24 @@ async function fillAppointment(page: Page, customer: string) {
 test("staff can create, edit, cancel and delete an appointment", async ({
   page,
 }) => {
-  await page.goto("/bookings/new");
+  await page.goto("/bookings?status=confirmed");
+  await expect(page.getByRole("row")).toHaveCount(9);
+  await page.getByRole("main").getByRole("link", { name: "New booking" }).click();
   const name = `Workshop test ${Date.now()}`;
   await fillAppointment(page, name);
+  await page.getByRole("combobox", { name: "Status", exact: true }).click();
+  await page.getByRole("option", { name: "Confirmed", exact: true }).click();
+  await page.evaluate(() => {
+    document.documentElement.dataset.navigationTest = "preserved";
+  });
   await page.getByRole("button", { name: "Create booking" }).click();
   await expect(page.getByRole("heading", { name })).toBeVisible();
   await expect(page.getByRole("status")).toContainText("Booking created");
+  await page.locator(".back-link").click();
+  await page.getByRole("navigation", { name: "Filter by booking status" }).getByRole("link", { name: "Confirmed", exact: true }).click();
+  await expect(page.getByRole("row")).toHaveCount(10);
+  await page.getByRole("link", { name, exact: true }).click();
+  await expect(page.locator("html")).toHaveAttribute("data-navigation-test", "preserved");
   await page.getByRole("link", { name: "Edit booking" }).click();
   await expect(page.getByLabel("Start date & time")).toContainText(
     "03 Nov 2030",
